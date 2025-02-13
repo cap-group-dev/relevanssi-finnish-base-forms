@@ -25,6 +25,9 @@ class FinnishBaseForms {
     // This is used for option keys etc.
     private $plugin_slug = 'relevanssi';
 
+    // Store lemmatized terms
+    private $lemmatized_terms = [];
+
     public function __construct()
     {
         // Add settings link on the plugin page
@@ -98,8 +101,21 @@ class FinnishBaseForms {
             } else if ($this->plugin_slug === 'relevanssi') {
                 add_filter('relevanssi_search_filters', function ($parameters) {
                     $parameters['q'] = $this->lemmatize($parameters['q']);
+                    $lemmatized_terms = $this->tokenize($parameters['q']);
+                    $this->lemmatized_terms = array_unique($lemmatized_terms);
+
                     return $parameters;
                 });
+
+                // Update the highlight regex to include both original and lemmatized terms in search results
+                add_filter('relevanssi_highlight_regex', function($regex, $term) {
+                    if (!empty($this->lemmatized_terms)) {
+                        // Create pattern including original term and all lemmatized forms
+                        $terms_pattern = "(?:" . $term . "|" . implode("|", $this->lemmatized_terms) . ")";
+                        $regex = '/([\w]*' . $terms_pattern . '[\W]|[\W]' . $terms_pattern . '[\w]*)/iu';
+                    }
+                    return $regex;
+                }, 10, 2);
             }
         }
 
@@ -124,6 +140,10 @@ class FinnishBaseForms {
      */
     private function lemmatize($content)
     {
+        if (!is_string($content) || empty($content)) {
+            return $content;
+        }
+
         $tokenized = $this->tokenize(strip_tags($content));
 
         $api_type = get_option("{$this->plugin_slug}_finnish_base_forms_api_type") ? get_option("{$this->plugin_slug}_finnish_base_forms_api_type") : 'binary';
@@ -134,6 +154,11 @@ class FinnishBaseForms {
             $api_root = get_option("{$this->plugin_slug}_finnish_base_forms_api_url");
             $extra_words = $this->web_api($tokenized, $api_root);
         }
+
+        // Filter out words that are already in the original content
+        $extra_words = array_filter($extra_words, function($word) use ($tokenized) {
+            return !in_array($word, $tokenized);
+        });
 
         $content = trim($content . ' ' . implode(' ', $extra_words));
 
