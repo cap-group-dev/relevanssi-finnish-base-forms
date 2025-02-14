@@ -140,7 +140,8 @@ class FinnishBaseForms {
      */
     private function lemmatize($content)
     {
-        if (!is_string($content) || empty($content)) {
+        // Return early if content is not a string, is empty, or is numeric
+        if (!is_string($content) || empty($content) || is_numeric($content)) {
             return $content;
         }
 
